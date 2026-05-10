@@ -229,9 +229,59 @@ def check_and_alert():
     return alerts_sent
 
 
+def format_trade_alert(trade_data, is_open=True):
+    """
+    Formatea una alerta de paper trade para Telegram.
+    """
+    symbol = trade_data.get("symbol", "???")
+    
+    if is_open:
+        entry_price = trade_data.get("entry_price", 0)
+        amount_usd = trade_data.get("amount_usd", 0)
+        msg = f"""
+🟢 <b>NUEVO PAPER TRADE</b> 🟢
+
+<b>Token:</b> {symbol}
+<b>Acción:</b> COMPRA
+<b>Precio Entrada:</b> ${entry_price:.8g}
+<b>Monto:</b> ${amount_usd:.2f}
+
+━━━━━━━━━━━━━━━━━━━━
+<i>🤖 Criminal Pump Detector v1.0</i>
+"""
+    else:
+        pnl_percent = trade_data.get("pnl_percent", 0)
+        pnl_usd = trade_data.get("pnl_usd", 0)
+        exit_reason = trade_data.get("exit_reason", "UNKNOWN")
+        
+        emoji = "🎯" if pnl_percent > 0 else "🛑"
+        if exit_reason == "TIME_STOP":
+            emoji = "⏱️"
+            
+        msg = f"""
+{emoji} <b>TRADE CERRADO ({exit_reason})</b> {emoji}
+
+<b>Token:</b> {symbol}
+<b>PNL:</b> {pnl_percent:+.2f}% (${pnl_usd:+.2f})
+
+━━━━━━━━━━━━━━━━━━━━
+<i>🤖 Criminal Pump Detector v1.0</i>
+"""
+    return msg.strip()
+
+
+def send_trade_alert(trade_data, is_open=True):
+    """Envía alerta por apertura o cierre de trade simulado."""
+    message = format_trade_alert(trade_data, is_open)
+    success = _send_telegram_message(message)
+    if success:
+        logger.info(f"📱 Alerta de trade enviada: {trade_data.get('symbol')} ({'OPEN' if is_open else 'CLOSE'})")
+    return success
+
+
 def send_daily_report():
     """
-    Envía un reporte diario con resumen de actividad.
+    Envía un reporte diario con resumen de actividad y PNL.
     """
     logger.info("📊 Generando reporte diario...")
     
@@ -246,10 +296,18 @@ def send_daily_report():
             GROUP BY level
         """).fetchall()
         
-        # Paper trades activos
+        # Paper trades stats
         open_trades = conn.execute("""
             SELECT COUNT(*) as cnt FROM paper_trades WHERE status = 'OPEN'
         """).fetchone()
+        
+        closed_today = conn.execute("""
+            SELECT COUNT(*) as cnt, SUM(pnl_usd) as pnl 
+            FROM paper_trades 
+            WHERE status = 'CLOSED' AND exit_time >= datetime('now', '-24 hours')
+        """).fetchone()
+    
+    total_pnl = db.get_total_pnl()
     
     signals_summary = ""
     for row in today_signals:
@@ -258,6 +316,10 @@ def send_daily_report():
     
     if not signals_summary:
         signals_summary = "  Sin señales en las últimas 24h\n"
+        
+    pnl_today = closed_today['pnl'] if closed_today and closed_today['pnl'] else 0
+    pnl_today_emoji = "🟩" if pnl_today > 0 else ("🟥" if pnl_today < 0 else "⬜")
+    total_pnl_emoji = "🟩" if total_pnl > 0 else ("🟥" if total_pnl < 0 else "⬜")
     
     msg = f"""
 📊 <b>REPORTE DIARIO</b> 📊
@@ -267,13 +329,17 @@ def send_daily_report():
 ━━━━━━━━━━━━━━━━━━━━
 
 <b>📡 Tokens rastreados:</b> {stats.get('tokens', 0)}
-<b>📈 Registros de precio:</b> {stats.get('price_data', 0)}
-<b>🎯 Métricas calculadas:</b> {stats.get('metrics', 0)}
 <b>📝 Señales totales:</b> {stats.get('signals', 0)}
 
 <b>Señales últimas 24h:</b>
 {signals_summary}
-<b>📋 Paper trades abiertos:</b> {open_trades['cnt'] if open_trades else 0}
+━━━━━━━━━━━━━━━━━━━━
+
+<b>💼 PAPER TRADING</b>
+<b>Trades abiertos:</b> {open_trades['cnt'] if open_trades else 0}
+<b>Cerrados hoy:</b> {closed_today['cnt'] if closed_today else 0}
+<b>PNL Hoy:</b> {pnl_today_emoji} ${pnl_today:+.2f}
+<b>PNL Total Acumulado:</b> {total_pnl_emoji} ${total_pnl:+.2f}
 
 ━━━━━━━━━━━━━━━━━━━━
 <i>🤖 Criminal Pump Detector v1.0</i>

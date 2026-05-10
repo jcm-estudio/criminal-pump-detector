@@ -398,6 +398,68 @@ def update_weight(rule_name, new_weight, accuracy=None):
 
 
 # ============================================================
+# FUNCIONES CRUD — PAPER TRADES
+# ============================================================
+
+def insert_paper_trade(token_id, signal_id, entry_price, amount_usd, token_amount):
+    """Inserta un nuevo trade simulado."""
+    now = datetime.now(timezone.utc).isoformat()
+    with get_db() as conn:
+        cursor = conn.execute("""
+            INSERT INTO paper_trades
+            (token_id, signal_id, entry_time, entry_price, amount_usd, token_amount, status)
+            VALUES (?, ?, ?, ?, ?, ?, 'OPEN')
+            RETURNING id
+        """, (token_id, signal_id, now, entry_price, amount_usd, token_amount))
+        row = cursor.fetchone()
+        return row["id"]
+
+
+def get_open_paper_trades():
+    """Retorna todos los trades abiertos."""
+    with get_db() as conn:
+        rows = conn.execute("""
+            SELECT pt.*, t.symbol, t.exchange
+            FROM paper_trades pt
+            JOIN tokens t ON pt.token_id = t.id
+            WHERE pt.status = 'OPEN'
+        """).fetchall()
+        return [dict(r) for r in rows]
+
+
+def close_paper_trade(trade_id, exit_price, pnl_percent, pnl_usd, exit_reason):
+    """Cierra un trade abierto."""
+    now = datetime.now(timezone.utc).isoformat()
+    with get_db() as conn:
+        conn.execute("""
+            UPDATE paper_trades
+            SET exit_time = ?, exit_price = ?, pnl_percent = ?, pnl_usd = ?,
+                exit_reason = ?, status = 'CLOSED'
+            WHERE id = ?
+        """, (now, exit_price, pnl_percent, pnl_usd, exit_reason, trade_id))
+
+
+def get_daily_trades_count():
+    """Cuenta cuántos trades se abrieron en las últimas 24hs."""
+    with get_db() as conn:
+        row = conn.execute("""
+            SELECT COUNT(*) as cnt FROM paper_trades
+            WHERE entry_time >= datetime('now', '-24 hours')
+        """).fetchone()
+        return row["cnt"]
+
+
+def get_total_pnl():
+    """Obtiene el PNL total acumulado en USD."""
+    with get_db() as conn:
+        row = conn.execute("""
+            SELECT SUM(pnl_usd) as total_pnl FROM paper_trades
+            WHERE status = 'CLOSED'
+        """).fetchone()
+        return row["total_pnl"] or 0.0
+
+
+# ============================================================
 # UTILIDADES
 # ============================================================
 

@@ -20,7 +20,8 @@ from src.config import LOG_PATH
 from src import database as db
 from src.data_collector import run_discover, run_update
 from src.pump_scorer import run_scoring
-from src.alert_bot import check_and_alert, send_daily_report, send_status
+from src.alert_bot import check_and_alert, send_daily_report, send_status, send_trade_alert
+import src.paper_trader as paper_trader
 
 # ============================================================
 # LOGGING
@@ -60,7 +61,7 @@ def job_discover():
 def job_update():
     """
     Actualización rápida (cada 15 min).
-    Pipeline completo: datos → métricas → scoring → alertas
+    Pipeline completo: datos → métricas → scoring → paper trading → alertas
     """
     logger.info("-" * 40)
     logger.info("🔄 JOB: UPDATE — Pipeline completo")
@@ -82,15 +83,29 @@ def job_update():
     # Paso 2: Scoring
     signals = run_scoring()
     
-    # Paso 3: Alertas
+    # Paso 3: Alertas de Signals
     alerts = check_and_alert()
     
-    # Paso 4: Limpieza de datos viejos (cada ejecución, es rápido)
+    # Paso 4: Paper Trading
+    logger.info("💼 PAPER TRADER — Evaluando trades...")
+    
+    # Evaluar trades abiertos (Take Profit / Stop Loss)
+    closed_trades = paper_trader.update_open_trades()
+    for trade in closed_trades:
+        send_trade_alert(trade, is_open=False)
+        
+    # Abrir nuevos trades
+    opened_trades = paper_trader.process_new_signals(signals)
+    for trade in opened_trades:
+        send_trade_alert(trade, is_open=True)
+        
+    # Paso 5: Limpieza de datos viejos
     db.cleanup_old_data(days=30)
     
     logger.info(
         f"✅ Update completo: {updated} precios, "
-        f"{len(signals)} señales, {alerts} alertas"
+        f"{len(signals)} señales, {alerts} alertas | "
+        f"Paper Trades: {len(opened_trades)} abiertos, {len(closed_trades)} cerrados"
     )
 
 
