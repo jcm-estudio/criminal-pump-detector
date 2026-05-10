@@ -76,12 +76,12 @@ def load_data():
         
     # Procesar fechas
     if not df_trades.empty:
-        df_trades['entry_time'] = pd.to_datetime(df_trades['entry_time']).dt.tz_localize('UTC')
+        df_trades['entry_time'] = pd.to_datetime(df_trades['entry_time'], utc=True)
         if 'exit_time' in df_trades.columns:
-            df_trades['exit_time'] = pd.to_datetime(df_trades['exit_time']).dt.tz_localize('UTC')
+            df_trades['exit_time'] = pd.to_datetime(df_trades['exit_time'], utc=True)
             
     if not df_signals.empty:
-        df_signals['timestamp'] = pd.to_datetime(df_signals['timestamp']).dt.tz_localize('UTC')
+        df_signals['timestamp'] = pd.to_datetime(df_signals['timestamp'], utc=True)
         
     return df_trades, df_signals, df_weights
 

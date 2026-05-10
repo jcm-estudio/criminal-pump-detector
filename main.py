@@ -16,12 +16,13 @@ from pathlib import Path
 # Agregar directorio raíz al path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from src.config import LOG_PATH
+from src.config import LOG_PATH, PAPER_TRADING
 from src import database as db
 from src.data_collector import run_discover, run_update
 from src.pump_scorer import run_scoring
 from src.alert_bot import check_and_alert, send_daily_report, send_status, send_trade_alert
 import src.paper_trader as paper_trader
+import src.real_trader as real_trader
 
 # ============================================================
 # LOGGING
@@ -61,7 +62,7 @@ def job_discover():
 def job_update():
     """
     Actualización rápida (cada 15 min).
-    Pipeline completo: datos → métricas → scoring → paper trading → alertas
+    Pipeline completo: datos → métricas → scoring → trading → alertas
     """
     logger.info("-" * 40)
     logger.info("🔄 JOB: UPDATE — Pipeline completo")
@@ -86,26 +87,32 @@ def job_update():
     # Paso 3: Alertas de Signals
     alerts = check_and_alert()
     
-    # Paso 4: Paper Trading
-    logger.info("💼 PAPER TRADER — Evaluando trades...")
+    # Paso 4: Trading (Paper o Real)
+    opened_trades = []
+    closed_trades = []
     
-    # Evaluar trades abiertos (Take Profit / Stop Loss)
-    closed_trades = paper_trader.update_open_trades()
-    for trade in closed_trades:
-        send_trade_alert(trade, is_open=False)
-        
-    # Abrir nuevos trades
-    opened_trades = paper_trader.process_new_signals(signals)
-    for trade in opened_trades:
-        send_trade_alert(trade, is_open=True)
+    if PAPER_TRADING:
+        logger.info("💼 PAPER TRADER — Evaluando trades simulados...")
+        closed_trades = paper_trader.update_open_trades()
+        for trade in closed_trades:
+            send_trade_alert(trade, is_open=False)
+            
+        opened_trades = paper_trader.process_new_signals(signals)
+        for trade in opened_trades:
+            send_trade_alert(trade, is_open=True)
+    else:
+        logger.warning("⚠️ REAL TRADING ACTIVADO — Evaluando operaciones reales...")
+        # Lógica futura: real_trader.update_open_trades()
+        opened_trades = real_trader.process_new_signals(signals)
         
     # Paso 5: Limpieza de datos viejos
     db.cleanup_old_data(days=30)
     
+    trade_mode = "PAPER" if PAPER_TRADING else "REAL"
     logger.info(
         f"✅ Update completo: {updated} precios, "
         f"{len(signals)} señales, {alerts} alertas | "
-        f"Paper Trades: {len(opened_trades)} abiertos, {len(closed_trades)} cerrados"
+        f"{trade_mode} Trades: {len(opened_trades)} abiertos, {len(closed_trades)} cerrados"
     )
 
 
