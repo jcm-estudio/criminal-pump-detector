@@ -122,6 +122,15 @@ def job_status():
     send_status()
 
 
+from src.learning_engine import run_optimization
+
+def job_optimize():
+    """Learning Engine: ajusta reglas en base a trades (1x/semana)."""
+    logger.info("🧠 JOB: OPTIMIZE — Learning Engine")
+    db.init_db()
+    run_optimization()
+
+
 def job_init():
     """Solo inicializar la base de datos."""
     db.init_db()
@@ -138,6 +147,7 @@ JOBS = {
     "update": job_update,
     "report": job_report,
     "status": job_status,
+    "optimize": job_optimize,
     "init": job_init,
 }
 

@@ -1,0 +1,58 @@
+name: "🧠 Learning Engine — Optimización Semanal"
+
+on:
+  schedule:
+    # Ejecutar 1 vez por semana (Domingos a las 23:00 UTC)
+    - cron: '0 23 * * 0'
+  workflow_dispatch:
+
+jobs:
+  optimize:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Checkout código
+        uses: actions/checkout@v4
+      
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      
+      - name: 📦 Instalar dependencias
+        run: pip install requests
+      
+      - name: 💾 Restaurar base de datos desde artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ARTIFACT_URL=$(gh api repos/${{ github.repository }}/actions/artifacts \
+            --jq '.artifacts[] | select(.name=="pump-detector-db" and .expired==false) | .archive_download_url' \
+            2>/dev/null | head -1)
+          
+          if [ -n "$ARTIFACT_URL" ]; then
+            echo "📦 Restaurando DB..."
+            mkdir -p data
+            gh api "$ARTIFACT_URL" > db.zip 2>/dev/null || true
+            if [ -f db.zip ] && [ -s db.zip ]; then
+              unzip -o db.zip -d data/ 2>/dev/null || true
+              echo "✅ DB restaurada"
+            fi
+            rm -f db.zip
+          fi
+
+      - name: 🧠 Ejecutar Learning Engine
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python main.py optimize
+      
+      - name: 💾 Guardar base de datos como artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pump-detector-db
+          path: data/pump_detector.db
+          retention-days: 7
+          overwrite: true
