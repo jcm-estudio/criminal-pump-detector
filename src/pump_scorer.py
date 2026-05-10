@@ -304,6 +304,11 @@ def score_token(token, metrics):
 def run_scoring():
     """
     Ejecuta el scoring completo para todos los tokens activos.
+    
+    Estrategia de 2 niveles:
+    1. Tokens CON métricas detalladas (klines): scoring completo
+    2. Tokens SIN métricas (solo ticker): scoring básico con price_data
+    
     Guarda señales en la DB si superan el umbral mínimo.
     
     Returns:
@@ -313,21 +318,45 @@ def run_scoring():
     
     active_tokens = db.get_active_tokens()
     signals_generated = []
+    scored_count = 0
     
     for token in active_tokens:
-        # Obtener métricas más recientes
-        metrics = db.get_latest_metrics(token["id"])
-        if not metrics:
-            continue
-        
         # Verificar si ya hay alerta reciente para este token
         if db.has_recent_alert(token["id"], hours=6):
             continue
+        
+        # Intentar obtener métricas detalladas (de klines)
+        metrics = db.get_latest_metrics(token["id"])
+        
+        # Fallback: construir métricas básicas desde price_data (ticker 24h)
+        if not metrics:
+            prices = db.get_price_history(token["id"], hours=1)
+            if not prices:
+                continue
+            
+            latest = prices[-1]
+            price_change_24h = latest.get("price_change_pct", 0)
+            quote_volume = latest.get("quote_volume", 0)
+            
+            # Solo evaluar si hay movimiento significativo
+            if abs(price_change_24h) < 3.0:
+                continue
+            
+            metrics = {
+                "volume_ratio": 1.5 if abs(price_change_24h) > 10 else 1.0,
+                "price_change_1h": price_change_24h / 6,  # Estimación
+                "price_change_4h": price_change_24h / 2,  # Estimación
+                "price_change_24h": price_change_24h,
+                "market_cap": 0,
+                "vol_7d_avg": quote_volume / 24,
+            }
         
         # Evaluar
         result = score_token(token, metrics)
         if result is None:
             continue
+        
+        scored_count += 1
         
         # Guardar señal en DB
         signal_id = db.insert_signal(
@@ -349,7 +378,7 @@ def run_scoring():
     
     logger.info(
         f"✅ Scoring completado: {len(signals_generated)} señales generadas "
-        f"de {len(active_tokens)} tokens evaluados"
+        f"de {len(active_tokens)} tokens evaluados ({scored_count} con métricas)"
     )
     
     return signals_generated
