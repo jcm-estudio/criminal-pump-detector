@@ -1,0 +1,47 @@
+name: "🔄 Update — Scan cada 15 min"
+
+on:
+  schedule:
+    # Ejecutar cada 15 minutos, minuto 3 (evitar el top de la hora)
+    - cron: '3,18,33,48 * * * *'
+  workflow_dispatch:
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Checkout código
+        uses: actions/checkout@v4
+      
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      
+      - name: 📦 Instalar dependencias
+        run: pip install requests
+      
+      - name: 💾 Restaurar base de datos
+        uses: actions/cache/restore@v4
+        with:
+          path: data/pump_detector.db
+          key: pump-db-
+          restore-keys: |
+            pump-db-
+      
+      - name: 🔄 Ejecutar Update + Scoring + Alertas
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          COINGECKO_API_KEY: ${{ secrets.COINGECKO_API_KEY }}
+          MORALIS_API_KEY: ${{ secrets.MORALIS_API_KEY }}
+        run: python main.py update
+      
+      - name: 💾 Guardar base de datos
+        uses: actions/cache/save@v4
+        if: always()
+        with:
+          path: data/pump_detector.db
+          key: pump-db-${{ github.run_number }}-${{ github.run_attempt }}

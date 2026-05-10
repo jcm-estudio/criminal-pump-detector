@@ -1,0 +1,38 @@
+name: "📊 Reporte Diario"
+
+on:
+  schedule:
+    # Ejecutar 1 vez por día a las 9:00 AM UTC (6 AM Argentina)
+    - cron: '0 9 * * *'
+  workflow_dispatch:
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Checkout código
+        uses: actions/checkout@v4
+      
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      
+      - name: 📦 Instalar dependencias
+        run: pip install requests
+      
+      - name: 💾 Restaurar base de datos
+        uses: actions/cache/restore@v4
+        with:
+          path: data/pump_detector.db
+          key: pump-db-
+          restore-keys: |
+            pump-db-
+      
+      - name: 📊 Enviar reporte diario
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python main.py report

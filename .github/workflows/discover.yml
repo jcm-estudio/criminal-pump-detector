@@ -1,0 +1,48 @@
+name: "🔍 Discover — Escaneo diario completo"
+
+on:
+  schedule:
+    # Ejecutar 1 vez por día a las 3:00 AM UTC
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+    # Permitir ejecución manual desde GitHub
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Checkout código
+        uses: actions/checkout@v4
+      
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      
+      - name: 📦 Instalar dependencias
+        run: pip install requests
+      
+      - name: 💾 Restaurar base de datos
+        uses: actions/cache@v4
+        with:
+          path: data/pump_detector.db
+          key: pump-db-${{ github.run_number }}
+          restore-keys: |
+            pump-db-
+      
+      - name: 🔍 Ejecutar Discover
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          COINGECKO_API_KEY: ${{ secrets.COINGECKO_API_KEY }}
+          MORALIS_API_KEY: ${{ secrets.MORALIS_API_KEY }}
+        run: python main.py discover
+      
+      - name: 💾 Guardar base de datos
+        uses: actions/cache/save@v4
+        if: always()
+        with:
+          path: data/pump_detector.db
+          key: pump-db-${{ github.run_number }}
