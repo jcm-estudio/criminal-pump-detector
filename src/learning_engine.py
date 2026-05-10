@@ -75,7 +75,7 @@ def analyze_and_optimize():
     
     for rule, stats in rule_stats.items():
         total = stats["success"] + stats["fail"]
-        if total < 3:  # Necesita un mínimo de activaciones para juzgar
+        if total < 1:  # Necesita un mínimo de activaciones para juzgar
             continue
             
         rule_win_rate = stats["success"] / total

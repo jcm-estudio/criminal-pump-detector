@@ -229,20 +229,38 @@ def check_and_alert():
     return alerts_sent
 
 
-def format_trade_alert(trade_data, is_open=True):
+def format_trade_alert(trade_data, is_open=True, strategy="PUMP_DETECTOR"):
     """
     Formatea una alerta de paper trade para Telegram.
+    Distingue visualmente si la señal viene de TradingView o del Pump Detector.
     """
     symbol = trade_data.get("symbol", "???")
     
+    if strategy == "TRADINGVIEW":
+        header = f"🎯 <b>SEÑAL TRADINGVIEW: {symbol}</b>"
+    else:
+        header = f"💼 <b>NUEVO PAPER TRADE: {symbol}</b>" if is_open else f"🏁 <b>PAPER TRADE CERRADO: {symbol}</b>"
+
     if is_open:
         entry_price = trade_data.get("entry_price", 0)
         amount_usd = trade_data.get("amount_usd", 0)
-        msg = f"""
-🟢 <b>NUEVO PAPER TRADE</b> 🟢
+        
+        if strategy == "TRADINGVIEW":
+            msg = f"""
+{header}
 
-<b>Token:</b> {symbol}
-<b>Acción:</b> COMPRA
+🔹 <b>Acción:</b> COMPRA (Señal Pine Script)
+💵 <b>Monto:</b> ${amount_usd:.2f}
+📌 <b>Precio Entrada:</b> ${entry_price:.8g}
+
+━━━━━━━━━━━━━━━━━━━━
+<i>🤖 Criminal Pump Detector v1.0</i>
+"""
+        else:
+            msg = f"""
+{header}
+
+<b>Acción:</b> COMPRA Mercado
 <b>Precio Entrada:</b> ${entry_price:.8g}
 <b>Monto:</b> ${amount_usd:.2f}
 
@@ -254,11 +272,23 @@ def format_trade_alert(trade_data, is_open=True):
         pnl_usd = trade_data.get("pnl_usd", 0)
         exit_reason = trade_data.get("exit_reason", "UNKNOWN")
         
-        emoji = "🎯" if pnl_percent > 0 else "🛑"
-        if exit_reason == "TIME_STOP":
-            emoji = "⏱️"
-            
-        msg = f"""
+        if strategy == "TRADINGVIEW":
+            emoji = "🎯" if pnl_percent > 0 else "🛑"
+            msg = f"""
+{header}
+
+🔹 <b>Acción:</b> VENTA (Señal Pine Script)
+<b>PNL:</b> {pnl_percent:+.2f}% (${pnl_usd:+.2f})
+
+━━━━━━━━━━━━━━━━━━━━
+<i>🤖 Criminal Pump Detector v1.0</i>
+"""
+        else:
+            emoji = "🎯" if pnl_percent > 0 else "🛑"
+            if exit_reason == "TIME_STOP":
+                emoji = "⏱️"
+                
+            msg = f"""
 {emoji} <b>TRADE CERRADO ({exit_reason})</b> {emoji}
 
 <b>Token:</b> {symbol}
@@ -269,13 +299,12 @@ def format_trade_alert(trade_data, is_open=True):
 """
     return msg.strip()
 
-
-def send_trade_alert(trade_data, is_open=True):
+def send_trade_alert(trade_data, is_open=True, strategy="PUMP_DETECTOR"):
     """Envía alerta por apertura o cierre de trade simulado."""
-    message = format_trade_alert(trade_data, is_open)
+    message = format_trade_alert(trade_data, is_open, strategy)
     success = _send_telegram_message(message)
     if success:
-        logger.info(f"📱 Alerta de trade enviada: {trade_data.get('symbol')} ({'OPEN' if is_open else 'CLOSE'})")
+        logger.info(f"📱 Alerta de trade enviada: {trade_data.get('symbol')} ({'OPEN' if is_open else 'CLOSE'}) [{strategy}]")
     return success
 
 

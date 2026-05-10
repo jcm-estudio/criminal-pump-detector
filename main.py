@@ -145,6 +145,19 @@ def job_init():
     logger.info(f"✅ Base de datos inicializada: {stats}")
 
 
+def job_tv_signal():
+    """Procesar webhook de TradingView. Requiere: tv_signal <ACTION> <SYMBOL>"""
+    if len(sys.argv) < 4:
+        logger.error("❌ Uso: python main.py tv_signal <BUY|SELL> <SYMBOL>")
+        sys.exit(1)
+        
+    action = sys.argv[2]
+    symbol = sys.argv[3]
+    
+    import src.tv_handler as tv
+    tv.process_tv_signal(action, symbol)
+
+
 # ============================================================
 # ENTRY POINT
 # ============================================================
@@ -156,6 +169,7 @@ JOBS = {
     "status": job_status,
     "optimize": job_optimize,
     "init": job_init,
+    "tv_signal": job_tv_signal,
 }
 
 if __name__ == "__main__":

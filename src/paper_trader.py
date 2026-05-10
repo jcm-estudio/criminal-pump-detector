@@ -163,3 +163,45 @@ def update_open_trades():
             )
             
     return closed_trades
+
+def force_close_trade(token_id, exit_reason="TV_SELL"):
+    """
+    Fuerza el cierre de un trade abierto para un token específico.
+    Usado por señales externas de SELL (ej: TradingView).
+    """
+    open_trades = db.get_open_paper_trades()
+    target_trade = next((t for t in open_trades if t["token_id"] == token_id), None)
+    
+    if not target_trade:
+        return None
+        
+    prices = db.get_price_history(token_id, hours=1)
+    if not prices:
+        return None
+        
+    current_price = prices[-1]["price"]
+    entry_price = target_trade["entry_price"]
+    pnl_percent = ((current_price - entry_price) / entry_price) * 100
+    pnl_usd = (target_trade["amount_usd"] * pnl_percent) / 100
+    
+    db.close_paper_trade(
+        trade_id=target_trade["id"],
+        exit_price=current_price,
+        pnl_percent=pnl_percent,
+        pnl_usd=pnl_usd,
+        exit_reason=exit_reason
+    )
+    
+    target_trade["exit_price"] = current_price
+    target_trade["pnl_percent"] = pnl_percent
+    target_trade["pnl_usd"] = pnl_usd
+    target_trade["exit_reason"] = exit_reason
+    
+    logger.info(
+        f"❌ PAPER TRADE CERRADO FORZOSAMENTE: {target_trade['symbol']} | "
+        f"Razón: {exit_reason} | "
+        f"PNL: {pnl_percent:+.2f}% (${pnl_usd:+.2f})"
+    )
+    
+    return target_trade
+
